@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #set software path used in this pipeline
-star_bin=/home/rnaseq/STAR-2.7.3a/bin/Linux_x86_64/STAR
+star_bin=/home/rnaseq/STAR-2.7.3a/bin/Linux_x86_64/
 
 usage()
 {
@@ -21,7 +21,7 @@ EOF
 }
 tmp_dir=./tmp
 threads=4
-eval set -- `getopt -o hn:f:g:i:o:p: -l tmp -- "$@"`
+eval set -- `getopt -o hn:f:g:i:o:p: -l tmp: -- "$@"`
 while [ $# -gt 0 ]
 do
 	case $1 in
@@ -66,7 +66,7 @@ do
 			exit 2
 			;;
 		*)
-			echo "enter the right para"
+			echo "enter the right parameter, not $1"
 			break
 			;;
 	esac
@@ -77,26 +77,23 @@ if [ -z "$project_name" ] || [ -z "$gfasta" ] || [ -z "$ggff" ] || [ -z "$in_dir
 fi
 start=$(date +%s.%N)
 if [ ! -d $out_dir ];then
-	mkdir $out_dir
+	mkdir "$out_dir"
 fi
 if [ ! -d $tmp_dir ];then
-	mkdir $tmp_dir
+	mkdir "$tmp_dir"
 fi
 echo start `date`
 # create index
-gname=${echo "$ggff"  | awk -F "/" '{print $NF}' | awk -F "." '{print $1}'}
-if [ ! -d $out_dir ]
-then
-	mkdir $out_dir/01.supp
-fi
-cp $gfasta $out_dir/01.supp
-cp $ggff $out_dir/01.supp
+gname=$(echo "$ggff"  | awk -F "/" '{print $NF}' | awk -F "." '{print $1}')
+mkdir "${out_dir}/01.supp"
+cp $gfasta $out_dir/01.supp/
+cp $ggff $out_dir/01.supp/
 gfasta=`realpath $out_dir/01.supp/${gfasta##*/}`
 ggff=`realpath $out_dir/01.supp/${ggff##*/}`
 ## hisat2
 hisat2-build -p $threads $gfasta $out_dir/01.supp/${gname}_hisat
 ## RSEM
-rsem-prepare-reference --gff  $ggff \
+rsem-prepare-reference --gff3 $ggff \
                     --star \
                     --star-path $star_bin \
                     -p $threads \
@@ -107,27 +104,26 @@ rsem-prepare-reference --gff  $ggff \
 
 # map and quantify for each sample
 ## make directory
-mkdir $out_dir/02.data
-mkdir $out_dir/03.data
+mkdir "${out_dir}/02.data"
+mkdir "${out_dir}/03.mapping"
 
 for sample_ in $in_dir/*
 do
 	s_name=$(echo "${sample_}"| awk -F "/" '{print $NF}')
-	mkdir $out_dir/$s_name
 	echo start "$s_name"
 	# If there is more than one SRR* file in a SRS file, run the following two lines.
-	if [ ${ls "$sample_" | wc -l } -gt 2 ];then
+	if [ $(ls "$sample_" | wc -l ) -gt 2 ];then
 		cat ${sample_}/*_1.fastq.gz >> $tmp_dir/${s_name}_1.fastq.gz
 		cat ${sample_}/*_2.fastq.gz >> $tmp_dir/${s_name}_2.fastq.gz
 		 fastp -q 20 -u 40 -l 50 -g -x -r -W 4 -M 20 -w $threads \
                                         -i $tmp_dir/${s_name}_1.fastq.gz -o $out_dir/02.data/${s_name}_clean_1.fastq.gz \
                                         -I $tmp_dir/${s_name}_2.fastq.gz -O $out_dir/02.data/${s_name}_clean_2.fastq.gz \
-                                        -h $out_dir/02.data${s_name}_report.html > $out_dir/02.data/${s_name}_fastp_report.txt
+                                        -h $out_dir/02.data/${s_name}_report.html > $out_dir/02.data/${s_name}_fastp_report.txt
 	else
 		fastp -q 20 -u 40 -l 50 -g -x -r -W 4 -M 20 -w $threads \
                                         -i ${sample_}/*_1.fastq.gz -o $out_dir/02.data/${s_name}_clean_1.fastq.gz \
                                         -I ${sample_}/*_2.fastq.gz -O $out_dir/02.data/${s_name}_clean_2.fastq.gz \
-                                        -h $out_dir/02.data${s_name}_report.html > $out_dir/02.data/${s_name}_fastp_report.txt
+                                        -h $out_dir/02.data${s_name}/_report.html > $out_dir/02.data/${s_name}_fastp_report.txt
 	fi
 	## determine strand
 	hisat2 -p $threads -x $out_dir/01.supp/${gname}_hisat \
@@ -161,8 +157,8 @@ do
 	$out_dir/03.mapping/${s_name}_star_RSEM
 done
 # quantative
-mkdir $out_dir/04.quan
-/home/rnaseq/RSEM-1.3.1/rsem-generate-data-matrix $out_dir/03.mapping/*.genes.results > $out_dir/04.quan${project_name}_GeneMat_rawCounts.txt
+mkdir "${out_dir}/04.quan"
+/home/rnaseq/RSEM-1.3.1/rsem-generate-data-matrix $out_dir/03.mapping/*.genes.results > $out_dir/04.quan/${project_name}_GeneMat_rawCounts.txt
 /home/rnaseq/RSEM-1.3.1/rsem-generate-data-matrix $out_dir/03.mapping/*.isoforms.results > $out_dir/04.quan/${project_name}_TransMat_rawCounts.txt
 
 /home/rnaseq/RSEM-1.3.1/rsem-generate-data-matrix-FPKM $out_dir/03.mapping/*.genes.results > $out_dir/04.quan/${project_name}_GeneMat_FPKM.txt
@@ -170,3 +166,10 @@ mkdir $out_dir/04.quan
 
 /home/rnaseq/RSEM-1.3.1/rsem-generate-data-matrix-TPM $out_dir/03.mapping/*.genes.results > $out_dir/04.quan/${project_name}_GeneMat_TPM.txt
 /home/rnaseq/RSEM-1.3.1/rsem-generate-data-matrix-TPM $out_dir/03.mapping/*.isoforms.results > $out_dir/04.quan/${project_name}_TransMat_TPM.txt
+
+# clean sample name
+tmp_re=$out_dir/03.mapping/
+sed -i "s/\"//g" $out_dir/04.quan/*.txt
+sed -i "s+$tmp_re++g" $out_dir/04.quan/*.txt
+sed -i "s/_star_RSEM.genes.results//g" $out_dir/04.quan/*_GeneMat_*.txt
+sed -i "s/_star_RSEM.isoforms.results//g" $out_dir/04.quan/*_TransMat_*.txt
