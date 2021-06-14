@@ -87,7 +87,7 @@ echo start `date`
 gname=$(echo "$ggff"  | awk -F "/" '{print $NF}' | awk -F "." '{print $1}')
 mkdir "${out_dir}/01.supp"
 cp $gfasta $out_dir/01.supp/
-cp $ggff $out_dir/01.supp/
+grep -v "#" $ggff | sed '/^\s*$/d' > $out_dir/01.supp/${ggff##*/}
 gfasta=`realpath $out_dir/01.supp/${gfasta##*/}`
 ggff=`realpath $out_dir/01.supp/${ggff##*/}`
 ## hisat2
@@ -99,6 +99,16 @@ rsem-prepare-reference --gff3 $ggff \
                     -p $threads \
                     $gfasta \
                     $out_dir/01.supp/${gname}_rsem
+if [ $? -eq 2 ];then
+	echo "Please remove 01.supp first"
+	exit 2
+fi
+#STAR
+STAR --runThreadN 10 --runMode genomeGenerate \
+     --genomeDir $out_dir/01.supp \
+     --genomeFastaFiles $gfasta \
+     --sjdbGTFfile $out_dir/01.supp/${gname}_rsem.gtf\
+     --sjdbOverhang 149
 ## RSeQC
 ./gtf2bed $out_dir/01.supp/${gname}.gtf > $out_dir/01.supp/$gname.bed
 
