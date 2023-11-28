@@ -10,19 +10,19 @@ suppressMessages({
 # construct args
 option_list <- list(
   make_option(c("-m", "--meta"), action="store", default=NA, type='character',
-              help="group information. Two columns:geneid/group"),
+              help="Group information. Two columns:sample/group"),
   make_option(c("-e", "--expression"), action="store", default=NA, type='character',
-              help="read counts file"),
+              help="Read counts file"),
   make_option(c("-a", "--annotation"), action="store", default=NA, type='character',
-              help="any other annotations. First column should be gene name"),
+              help="Any other annotations. First column should be gene name"),
   make_option(c("-c", "--compare"), action="store", default=NA, type='character',
-              help="Group to be compared. Two groups per line"),
+              help="Group to be compared. Two groups per line, tab-separated"),
   make_option(c("-k", "--kegg"), action="store", default=NA, type='character',
               help="KEGG annotation. Two columns: geneid/KO num"),
   make_option(c("-g", "--go"), action="store", default=NA, type='character',
               help="GO annotation. Two columns: geneid/GO num"),
   make_option(c("-o", "--outdir"), action="store", default=NA, type='character',
-              help="output directory.")
+              help="Output directory.")
 )
 
 opt <- parse_args(
@@ -30,9 +30,7 @@ opt <- parse_args(
     usage = "usage: %prog [options]",
     prog = "PEx",
     option_list=option_list,
-    description = "
-    All flies (except read counts matrix) should not have headers
-    ")
+    description = "All flies (except read counts matrix) should not have headers")
   )
 
 get_this_file <- function(){
@@ -121,14 +119,16 @@ for (idx in 1:nrow(groupmeta)) {
         heatplot(kegg_enrich, foldChange=gene_list)
         ggplot2::ggsave(paste(out_dir, 'heatplot.pdf', sep='/'), width = 15, height = 3)
         ### cnetplot
-        cnetplot(kegg_enrich)
-        ggplot2::ggsave(paste(out_dir, 'cnetplot.pdf', sep='/'), width = 10, height = 10)
+        tryCatch({
+	  cnetplot(kegg_enrich)
+          ggplot2::ggsave(paste(out_dir, 'cnetplot.pdf', sep='/'), width = 10, height = 10)},
+	  error = function(e)e)
         }
       }
     
     ## go enrichment
       for ( lev in c('BP','CC','MF')) {
-        go_enrich <- enricher(names(gene_list), 
+	go_enrich <- enricher(names(gene_list), 
                               pAdjustMethod = "fdr", 
                               TERM2GENE = go_annotation[go_annotation$level==lev, c(2,1)], 
                               TERM2NAME = go_info[go_info$level==lev, c(1,2)])
@@ -142,9 +142,12 @@ for (idx in 1:nrow(groupmeta)) {
           heatplot(go_enrich, foldChange=gene_list)
           ggplot2::ggsave(paste(out_dir, paste0(lev,'heatplot.pdf'), sep='/'), width = 15, height = 3)
           ### cneplot
-          cnetplot(go_enrich)
-          ggplot2::ggsave(paste(out_dir, paste0(lev,'cnetplot.pdf'), sep='/'), width = 10, height = 10)
-          }
+          tryCatch({
+	    cnetplot(go_enrich)
+            ggplot2::ggsave(paste(out_dir, paste0(lev,'cnetplot.pdf'), sep='/'), width = 10, height = 10)},
+            error = function(e) e
+	  )
+	  }
         }
       }
     }
